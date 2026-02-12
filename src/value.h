@@ -15,6 +15,9 @@ typedef enum {
 typedef struct Value Value;
 typedef struct Function Function;
 
+typedef struct Stmt Stmt;
+typedef struct Env Env;
+
 typedef Value (*BuiltinFn)(Value *args, size_t argc);
 
 typedef struct {
@@ -38,6 +41,18 @@ struct Value {
         BuiltinFn builtin_val;
     } as;
 };
+
+typedef struct Function {
+    char **params;
+    size_t param_count;
+
+    Stmt **body;
+    size_t body_count;
+
+    Env *closure;  // entorno donde se definió
+} Function;
+
+
 
 /* Constructors */
 Value value_int(int64_t x);
