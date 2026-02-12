@@ -4,7 +4,8 @@ CFLAGS = -Wall -Wextra -std=c11 -g
 SRC = src/main.c \
       src/value.c \
       src/env.c \
-      src/ast.c
+      src/ast.c \
+      src/lexer.c
 
 OBJ = $(SRC:.c=.o)
 
