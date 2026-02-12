@@ -13,4 +13,6 @@ typedef struct {
 void parser_init(Parser *parser, Lexer *lexer);
 Program *parse_program(Parser *parser);
 
+void print_expr(Expr *expr, int indent);
+Expr *parser_parse_expression(Parser *p);
 #endif

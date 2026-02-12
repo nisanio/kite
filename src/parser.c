@@ -160,3 +160,54 @@ Program *parse_program(Parser *p) {
     program->count = 0;
     return program;
 }
+
+Expr *parser_parse_expression(Parser *p) {
+    return parse_expression(p);
+}
+
+/* =========================
+   Debug: print expression
+   ========================= */
+
+static void print_indent(int indent) {
+    for (int i = 0; i < indent; i++) {
+        printf("  ");
+    }
+}
+
+void print_expr(Expr *expr, int indent) {
+    if (!expr) return;
+
+    print_indent(indent);
+
+    switch (expr->kind) {
+        case EXPR_INT:
+            printf("INT(%lld)\n", (long long)expr->as.int_val);
+            break;
+
+        case EXPR_VAR:
+            printf("VAR(%s)\n", expr->as.var.name);
+            break;
+
+        case EXPR_UNARY:
+            printf("UNARY(-)\n");
+            print_expr(expr->as.unary.rhs, indent + 1);
+            break;
+
+        case EXPR_BINARY:
+            switch (expr->as.binary.op) {
+                case BIN_ADD: printf("BINARY(+)\n"); break;
+                case BIN_SUB: printf("BINARY(-)\n"); break;
+                case BIN_MUL: printf("BINARY(*)\n"); break;
+                case BIN_DIV: printf("BINARY(/)\n"); break;
+                default: printf("BINARY(?)\n"); break;
+            }
+            print_expr(expr->as.binary.lhs, indent + 1);
+            print_expr(expr->as.binary.rhs, indent + 1);
+            break;
+
+        default:
+            printf("UNKNOWN_EXPR\n");
+            break;
+    }
+}
