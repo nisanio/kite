@@ -5,7 +5,8 @@ SRC = src/main.c \
       src/value.c \
       src/env.c \
       src/ast.c \
-      src/lexer.c
+      src/lexer.c \
+      src/parser.c
 
 OBJ = $(SRC:.c=.o)
 

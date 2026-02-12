@@ -20,10 +20,11 @@ static char peek(Lexer *l) {
     return *l->current;
 }
 
-static char peek_next(Lexer *l) {
+// Probably we need this in the future
+/* static char peek_next(Lexer *l) {
     if (is_at_end(l)) return '\0';
     return l->current[1];
-}
+} */
 
 static void skip_whitespace(Lexer *l) {
     for (;;) {
