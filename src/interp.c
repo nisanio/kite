@@ -2,6 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+static int is_bool(Value v) {
+    return v.type == VAL_BOOL;
+}
+
 Value eval_expr(Expr *expr, Env *env) {
     switch (expr->kind) {
 
@@ -28,16 +32,70 @@ Value eval_expr(Expr *expr, Env *env) {
                 return value_int(-right.as.int_val);
             }
 
+            if (expr->as.unary.op == UNOP_NOT) {
+                if (!is_bool(right)) {
+                    printf("'not' requires boolean\n");
+                    exit(1);
+                }
+                return value_bool(!right.as.bool_val);
+            }
+
             break;
         }
 
         case EXPR_BINARY: {
+
+            /* Short-circuit logic */
+            if (expr->as.binary.op == BIN_AND) {
+                Value left = eval_expr(expr->as.binary.lhs, env);
+
+                if (!is_bool(left)) {
+                    printf("'and' requires boolean operands\n");
+                    exit(1);
+                }
+
+                if (!left.as.bool_val) {
+                    return value_bool(0);
+                }
+
+                Value right = eval_expr(expr->as.binary.rhs, env);
+
+                if (!is_bool(right)) {
+                    printf("'and' requires boolean operands\n");
+                    exit(1);
+                }
+
+                return value_bool(right.as.bool_val);
+            }
+
+            if (expr->as.binary.op == BIN_OR) {
+                Value left = eval_expr(expr->as.binary.lhs, env);
+
+                if (!is_bool(left)) {
+                    printf("'or' requires boolean operands\n");
+                    exit(1);
+                }
+
+                if (left.as.bool_val) {
+                    return value_bool(1);
+                }
+
+                Value right = eval_expr(expr->as.binary.rhs, env);
+
+                if (!is_bool(right)) {
+                    printf("'or' requires boolean operands\n");
+                    exit(1);
+                }
+
+                return value_bool(right.as.bool_val);
+            }
+
+            /* Non short-circuit operators */
             Value left = eval_expr(expr->as.binary.lhs, env);
             Value right = eval_expr(expr->as.binary.rhs, env);
 
             switch (expr->as.binary.op) {
 
-                /* Arithmetic */
                 case BIN_ADD:
                 case BIN_SUB:
                 case BIN_MUL:
@@ -48,20 +106,14 @@ Value eval_expr(Expr *expr, Env *env) {
                     }
 
                     switch (expr->as.binary.op) {
-                        case BIN_ADD:
-                            return value_int(left.as.int_val + right.as.int_val);
-                        case BIN_SUB:
-                            return value_int(left.as.int_val - right.as.int_val);
-                        case BIN_MUL:
-                            return value_int(left.as.int_val * right.as.int_val);
-                        case BIN_DIV:
-                            return value_int(left.as.int_val / right.as.int_val);
-                        default:
-                            break;
+                        case BIN_ADD: return value_int(left.as.int_val + right.as.int_val);
+                        case BIN_SUB: return value_int(left.as.int_val - right.as.int_val);
+                        case BIN_MUL: return value_int(left.as.int_val * right.as.int_val);
+                        case BIN_DIV: return value_int(left.as.int_val / right.as.int_val);
+                        default: break;
                     }
                 }
 
-                /* Comparison */
                 case BIN_EQ:
                 case BIN_NEQ:
                 case BIN_LT:
@@ -76,26 +128,13 @@ Value eval_expr(Expr *expr, Env *env) {
                     int result = 0;
 
                     switch (expr->as.binary.op) {
-                        case BIN_EQ:
-                            result = (left.as.int_val == right.as.int_val);
-                            break;
-                        case BIN_NEQ:
-                            result = (left.as.int_val != right.as.int_val);
-                            break;
-                        case BIN_LT:
-                            result = (left.as.int_val < right.as.int_val);
-                            break;
-                        case BIN_LTE:
-                            result = (left.as.int_val <= right.as.int_val);
-                            break;
-                        case BIN_GT:
-                            result = (left.as.int_val > right.as.int_val);
-                            break;
-                        case BIN_GTE:
-                            result = (left.as.int_val >= right.as.int_val);
-                            break;
-                        default:
-                            break;
+                        case BIN_EQ:  result = (left.as.int_val == right.as.int_val); break;
+                        case BIN_NEQ: result = (left.as.int_val != right.as.int_val); break;
+                        case BIN_LT:  result = (left.as.int_val <  right.as.int_val); break;
+                        case BIN_LTE: result = (left.as.int_val <= right.as.int_val); break;
+                        case BIN_GT:  result = (left.as.int_val >  right.as.int_val); break;
+                        case BIN_GTE: result = (left.as.int_val >= right.as.int_val); break;
+                        default: break;
                     }
 
                     return value_bool(result);
