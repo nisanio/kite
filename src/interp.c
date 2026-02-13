@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
+
 /* =========================
    Helpers
    ========================= */
@@ -19,15 +21,17 @@ static void runtime_error(const char *msg) {
     exit(1);
 }
 
+
+
+/* =========================
+   Expr evaluation (split)
+   ========================= */
+
 static void eval_block(Stmt **stmts, size_t count, Env *env) {
     for (size_t i = 0; i < count; i++) {
         eval_stmt(stmts[i], env);
     }
 }
-
-/* =========================
-   Expr evaluation (split)
-   ========================= */
 
 static Value eval_int_expr(Expr *expr) {
     return value_int(expr->as.int_val);
@@ -184,6 +188,46 @@ static Value eval_binary_expr(Expr *expr, Env *env) {
     }
 }
 
+static void eval_do_stmt(Stmt *stmt, Env *env) {
+
+    if (!stmt->as.do_stmt.is_post) {
+        /* while-style */
+        while (1) {
+            Value cond = eval_expr(stmt->as.do_stmt.cond, env);
+
+            if (!is_bool(cond))
+                runtime_error("do condition must be boolean");
+
+            if (!cond.as.bool_val)
+                break;
+
+            eval_block(stmt->as.do_stmt.body,
+                       stmt->as.do_stmt.body_count,
+                       env);
+        }
+
+        return;
+    }
+
+    /* repeat-style */
+    while (1) {
+        eval_block(stmt->as.do_stmt.body,
+                   stmt->as.do_stmt.body_count,
+                   env);
+
+        Value cond = eval_expr(stmt->as.do_stmt.cond, env);
+
+        if (!is_bool(cond))
+            runtime_error("until condition must be boolean");
+
+        if (cond.as.bool_val)
+            break;
+    }
+}
+
+
+
+
 Value eval_expr(Expr *expr, Env *env) {
     switch (expr->kind) {
         case EXPR_INT:
@@ -261,6 +305,10 @@ void eval_stmt(Stmt *stmt, Env *env) {
 
         case STMT_IF:
             eval_if_stmt(stmt, env);
+            break;
+        
+        case STMT_DO:
+            eval_do_stmt(stmt, env);
             break;
 
         default:

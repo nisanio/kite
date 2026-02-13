@@ -133,6 +133,8 @@ struct Stmt {
             Expr *cond;
             Stmt **body;
             size_t body_count;
+            int is_post; // 0 = do <cond> ... end
+                         // 1 = do ... until <cond>
         } do_stmt;
 
         struct {

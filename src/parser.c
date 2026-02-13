@@ -20,7 +20,7 @@ static Stmt *parse_statement(Parser *p);
 static Stmt *parse_if(Parser *p);
 static Stmt *parse_assignment(Parser *p);
 static Stmt *parse_expr_statement(Parser *p);
-
+static Stmt *new_stmt(StmtKind kind);
 static Stmt *parse_do(Parser *p);
 static Stmt *parse_fn_def(Parser *p);
 static Stmt *parse_return(Parser *p);
@@ -262,9 +262,74 @@ static Expr *parse_primary(Parser *p) {
 
 
 static Stmt *parse_do(Parser *p) {
-    printf("parse_do: not implemented yet\n");
-    exit(1);
+    advance(p);  // consume 'do'
+
+    Expr *cond = NULL;
+    int is_post = 0;
+
+    /* Detect form */
+
+    if (p->current.type != TOK_NEWLINE) {
+        /* while-style: do <expr> */
+        cond = parse_expression(p);
+
+        if (p->current.type != TOK_NEWLINE) {
+            printf("Expected newline after do condition\n");
+            exit(1);
+        }
+
+        advance(p);  // consume newline
+        is_post = 0;
+    } else {
+        /* repeat-style: do NEWLINE */
+        advance(p);  // consume newline
+        is_post = 1;
+    }
+
+    Stmt **body = NULL;
+    size_t body_count = 0;
+
+    while (p->current.type != TOK_END &&
+           p->current.type != TOK_UNTIL &&
+           p->current.type != TOK_EOF) {
+
+        Stmt *stmt = parse_statement(p);
+
+        body = realloc(body, sizeof(Stmt*) * (body_count + 1));
+        body[body_count++] = stmt;
+
+        while (p->current.type == TOK_NEWLINE)
+            advance(p);
+    }
+
+    if (is_post) {
+        /* expect until <expr> */
+        if (p->current.type != TOK_UNTIL) {
+            printf("Expected 'until' to close do block\n");
+            exit(1);
+        }
+
+        advance(p);  // consume 'until'
+        cond = parse_expression(p);
+    } else {
+        /* expect end */
+        if (p->current.type != TOK_END) {
+            printf("Expected 'end' to close do block\n");
+            exit(1);
+        }
+
+        advance(p);  // consume 'end'
+    }
+
+    Stmt *stmt = new_stmt(STMT_DO);
+    stmt->as.do_stmt.cond = cond;
+    stmt->as.do_stmt.body = body;
+    stmt->as.do_stmt.body_count = body_count;
+    stmt->as.do_stmt.is_post = is_post;
+
+    return stmt;
 }
+
 
 static Stmt *parse_fn_def(Parser *p) {
     printf("parse_fn_def: not implemented yet\n");
