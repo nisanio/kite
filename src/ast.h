@@ -14,6 +14,7 @@ typedef struct Stmt Stmt;
 
 typedef enum {
     EXPR_INT,
+    EXPR_BOOL, 
     EXPR_STRING,
     EXPR_VAR,
     EXPR_ARRAY,
@@ -50,7 +51,8 @@ struct Expr {
 
     union {
         int64_t int_val;
-
+        int bool_val; 
+        
         struct {
             char *data;
             size_t len;

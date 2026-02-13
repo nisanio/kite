@@ -234,6 +234,18 @@ static Expr *parse_primary(Parser *p) {
         return expr;
     }
 
+    if (match(p, TOK_TRUE)) {
+        Expr *expr = new_expr(EXPR_BOOL);
+        expr->as.bool_val = 1;
+        return expr;
+    }
+
+    if (match(p, TOK_FALSE)) {
+        Expr *expr = new_expr(EXPR_BOOL);
+        expr->as.bool_val = 0;
+        return expr;
+    }
+
     if (match(p, TOK_IDENT)) {
         Expr *expr = new_expr(EXPR_VAR);
 
@@ -331,4 +343,74 @@ Program *parse_program(Parser *p) {
 
 Expr *parser_parse_expression(Parser *p) {
     return parse_expression(p);
+}
+
+/* =========================
+   Debug: print expression
+   ========================= */
+
+static void print_indent(int indent) {
+    for (int i = 0; i < indent; i++) {
+        printf("  ");
+    }
+}
+
+void print_expr(Expr *expr, int indent) {
+    if (!expr) return;
+
+    print_indent(indent);
+
+    switch (expr->kind) {
+
+        case EXPR_INT:
+            printf("INT(%lld)\n", (long long)expr->as.int_val);
+            break;
+
+        case EXPR_BOOL:
+            printf("BOOL(%s)\n", expr->as.bool_val ? "true" : "false");
+            break;
+
+        case EXPR_STRING:
+            printf("STRING(\"%.*s\")\n",
+                   (int)expr->as.string.len,
+                   expr->as.string.data);
+            break;
+
+        case EXPR_VAR:
+            printf("VAR(%s)\n", expr->as.var.name);
+            break;
+
+        case EXPR_UNARY:
+            switch (expr->as.unary.op) {
+                case UNOP_NEG: printf("UNARY(-)\n"); break;
+                case UNOP_NOT: printf("UNARY(not)\n"); break;
+            }
+            print_expr(expr->as.unary.rhs, indent + 1);
+            break;
+
+        case EXPR_BINARY:
+            switch (expr->as.binary.op) {
+                case BIN_ADD: printf("BINARY(+)\n"); break;
+                case BIN_SUB: printf("BINARY(-)\n"); break;
+                case BIN_MUL: printf("BINARY(*)\n"); break;
+                case BIN_DIV: printf("BINARY(/)\n"); break;
+                case BIN_EQ:  printf("BINARY(==)\n"); break;
+                case BIN_NEQ: printf("BINARY(!=)\n"); break;
+                case BIN_LT:  printf("BINARY(<)\n"); break;
+                case BIN_LTE: printf("BINARY(<=)\n"); break;
+                case BIN_GT:  printf("BINARY(>)\n"); break;
+                case BIN_GTE: printf("BINARY(>=)\n"); break;
+                case BIN_AND: printf("BINARY(and)\n"); break;
+                case BIN_OR:  printf("BINARY(or)\n"); break;
+                default: printf("BINARY(?)\n"); break;
+            }
+
+            print_expr(expr->as.binary.lhs, indent + 1);
+            print_expr(expr->as.binary.rhs, indent + 1);
+            break;
+
+        default:
+            printf("UNKNOWN_EXPR\n");
+            break;
+    }
 }
