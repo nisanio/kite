@@ -15,7 +15,15 @@ static Expr *parse_term(Parser *p);
 static Expr *parse_factor(Parser *p);
 static Expr *parse_unary(Parser *p);
 static Expr *parse_primary(Parser *p);
+
 static Stmt *parse_statement(Parser *p);
+static Stmt *parse_if(Parser *p);
+static Stmt *parse_assignment(Parser *p);
+static Stmt *parse_expr_statement(Parser *p);
+
+static Stmt *parse_do(Parser *p);
+static Stmt *parse_fn_def(Parser *p);
+static Stmt *parse_return(Parser *p);
 
 /* =========================
    Utilities
@@ -33,10 +41,6 @@ static int match(Parser *p, TokenType type) {
     }
     return 0;
 }
-
-/* =========================
-   Init
-   ========================= */
 
 void parser_init(Parser *p, Lexer *lexer) {
     p->lexer = lexer;
@@ -57,13 +61,11 @@ static Expr *parse_expression(Parser *p) {
     return parse_or(p);
 }
 
-/* or */
 static Expr *parse_or(Parser *p) {
     Expr *expr = parse_and(p);
 
     while (p->current.type == TOK_OR) {
         advance(p);
-
         Expr *right = parse_and(p);
 
         Expr *binary = new_expr(EXPR_BINARY);
@@ -77,13 +79,11 @@ static Expr *parse_or(Parser *p) {
     return expr;
 }
 
-/* and */
 static Expr *parse_and(Parser *p) {
     Expr *expr = parse_equality(p);
 
     while (p->current.type == TOK_AND) {
         advance(p);
-
         Expr *right = parse_equality(p);
 
         Expr *binary = new_expr(EXPR_BINARY);
@@ -97,7 +97,6 @@ static Expr *parse_and(Parser *p) {
     return expr;
 }
 
-/* equality */
 static Expr *parse_equality(Parser *p) {
     Expr *expr = parse_comparison(p);
 
@@ -120,7 +119,6 @@ static Expr *parse_equality(Parser *p) {
     return expr;
 }
 
-/* comparison */
 static Expr *parse_comparison(Parser *p) {
     Expr *expr = parse_term(p);
 
@@ -200,21 +198,17 @@ static Expr *parse_factor(Parser *p) {
 static Expr *parse_unary(Parser *p) {
     if (match(p, TOK_MINUS)) {
         Expr *right = parse_unary(p);
-
         Expr *unary = new_expr(EXPR_UNARY);
         unary->as.unary.op = UNOP_NEG;
         unary->as.unary.rhs = right;
-
         return unary;
     }
 
     if (match(p, TOK_NOT)) {
         Expr *right = parse_unary(p);
-
         Expr *unary = new_expr(EXPR_UNARY);
         unary->as.unary.op = UNOP_NOT;
         unary->as.unary.rhs = right;
-
         return unary;
     }
 
@@ -248,12 +242,8 @@ static Expr *parse_primary(Parser *p) {
 
     if (match(p, TOK_IDENT)) {
         Expr *expr = new_expr(EXPR_VAR);
-
-        expr->as.var.name = strndup(
-            p->previous.start,
-            p->previous.length
-        );
-
+        expr->as.var.name = strndup(p->previous.start,
+                                    p->previous.length);
         return expr;
     }
 
@@ -270,8 +260,24 @@ static Expr *parse_primary(Parser *p) {
     exit(1);
 }
 
+
+static Stmt *parse_do(Parser *p) {
+    printf("parse_do: not implemented yet\n");
+    exit(1);
+}
+
+static Stmt *parse_fn_def(Parser *p) {
+    printf("parse_fn_def: not implemented yet\n");
+    exit(1);
+}
+
+static Stmt *parse_return(Parser *p) {
+    printf("parse_return: not implemented yet\n");
+    exit(1);
+}
+
 /* =========================
-   Program & Debug (idéntico al anterior)
+   Statement parsing
    ========================= */
 
 static Stmt *new_stmt(StmtKind kind) {
@@ -280,27 +286,100 @@ static Stmt *new_stmt(StmtKind kind) {
     return s;
 }
 
-static Stmt *parse_statement(Parser *p) {
-    if (p->current.type == TOK_IDENT) {
-        Token ident = p->current;
+static Stmt *parse_if(Parser *p) {
+    advance(p);  // consume 'if'
 
-        Lexer saved = *(p->lexer);
-        Token next = lexer_next(&saved);
+    Expr *cond = parse_expression(p);
 
-        if (next.type == TOK_ASSIGN) {
+    if (p->current.type != TOK_NEWLINE) {
+        printf("Expected newline after if condition\n");
+        exit(1);
+    }
+    advance(p);  // consume newline
+
+    Stmt **then_body = NULL;
+    size_t then_count = 0;
+
+    while (p->current.type != TOK_ELSE &&
+           p->current.type != TOK_END &&
+           p->current.type != TOK_EOF) {
+
+        Stmt *stmt = parse_statement(p);
+
+        then_body = realloc(then_body,
+                            sizeof(Stmt*) * (then_count + 1));
+        then_body[then_count++] = stmt;
+
+        while (p->current.type == TOK_NEWLINE)
             advance(p);
-            advance(p);
+    }
 
-            Expr *value = parse_expression(p);
+    Stmt **else_body = NULL;
+    size_t else_count = 0;
 
-            Stmt *stmt = new_stmt(STMT_ASSIGN);
-            stmt->as.assign.name = strndup(ident.start, ident.length);
-            stmt->as.assign.value = value;
+    if (p->current.type == TOK_ELSE) {
+        advance(p);  // consume 'else'
 
-            return stmt;
+        if (p->current.type != TOK_NEWLINE) {
+            printf("Expected newline after else\n");
+            exit(1);
+        }
+        advance(p);  // consume newline
+
+        while (p->current.type != TOK_END &&
+               p->current.type != TOK_EOF) {
+
+            Stmt *stmt = parse_statement(p);
+
+            else_body = realloc(else_body,
+                                sizeof(Stmt*) * (else_count + 1));
+            else_body[else_count++] = stmt;
+
+            while (p->current.type == TOK_NEWLINE)
+                advance(p);
         }
     }
 
+    if (p->current.type != TOK_END) {
+        printf("Expected 'end' to close if\n");
+        exit(1);
+    }
+
+    advance(p);  // consume 'end'
+
+    Stmt *stmt = new_stmt(STMT_IF);
+    stmt->as.if_stmt.cond = cond;
+    stmt->as.if_stmt.then_body = then_body;
+    stmt->as.if_stmt.then_count = then_count;
+    stmt->as.if_stmt.else_body = else_body;
+    stmt->as.if_stmt.else_count = else_count;
+
+    return stmt;
+}
+
+static Stmt *parse_assignment(Parser *p) {
+    Token ident = p->current;
+
+    Lexer saved = *(p->lexer);
+    Token next = lexer_next(&saved);
+
+    if (next.type != TOK_ASSIGN)
+        return NULL;
+
+    advance(p);
+    advance(p);
+
+    Expr *value = parse_expression(p);
+
+    Stmt *stmt = new_stmt(STMT_ASSIGN);
+    stmt->as.assign.name = strndup(ident.start,
+                                   ident.length);
+    stmt->as.assign.value = value;
+
+    return stmt;
+}
+
+static Stmt *parse_expr_statement(Parser *p) {
     Expr *expr = parse_expression(p);
 
     Stmt *stmt = new_stmt(STMT_EXPR);
@@ -309,6 +388,32 @@ static Stmt *parse_statement(Parser *p) {
     return stmt;
 }
 
+static Stmt *parse_statement(Parser *p) {
+    // pending statements to implement
+    switch (p->current.type) {
+        case TOK_IF:     return parse_if(p);
+        case TOK_DO:     return parse_do(p);
+        case TOK_FN:     return parse_fn_def(p);
+        case TOK_RETURN: return parse_return(p);
+        default: break;
+    }
+
+    if (p->current.type == TOK_IF)
+        return parse_if(p);
+
+    if (p->current.type == TOK_IDENT) {
+        Stmt *assign = parse_assignment(p);
+        if (assign)
+            return assign;
+    }
+
+    return parse_expr_statement(p);
+}
+
+/* =========================
+   Program
+   ========================= */
+
 Program *parse_program(Parser *p) {
     Program *program = malloc(sizeof(Program));
     program->stmts = NULL;
@@ -316,26 +421,21 @@ Program *parse_program(Parser *p) {
 
     while (p->current.type != TOK_EOF) {
 
-        while (p->current.type == TOK_NEWLINE) {
+        while (p->current.type == TOK_NEWLINE)
             advance(p);
-        }
 
-        if (p->current.type == TOK_EOF) {
+        if (p->current.type == TOK_EOF)
             break;
-        }
 
         Stmt *stmt = parse_statement(p);
 
-        program->stmts = realloc(
-            program->stmts,
-            sizeof(Stmt*) * (program->count + 1)
-        );
+        program->stmts = realloc(program->stmts,
+            sizeof(Stmt*) * (program->count + 1));
 
         program->stmts[program->count++] = stmt;
 
-        while (p->current.type == TOK_NEWLINE) {
+        while (p->current.type == TOK_NEWLINE)
             advance(p);
-        }
     }
 
     return program;
@@ -343,74 +443,4 @@ Program *parse_program(Parser *p) {
 
 Expr *parser_parse_expression(Parser *p) {
     return parse_expression(p);
-}
-
-/* =========================
-   Debug: print expression
-   ========================= */
-
-static void print_indent(int indent) {
-    for (int i = 0; i < indent; i++) {
-        printf("  ");
-    }
-}
-
-void print_expr(Expr *expr, int indent) {
-    if (!expr) return;
-
-    print_indent(indent);
-
-    switch (expr->kind) {
-
-        case EXPR_INT:
-            printf("INT(%lld)\n", (long long)expr->as.int_val);
-            break;
-
-        case EXPR_BOOL:
-            printf("BOOL(%s)\n", expr->as.bool_val ? "true" : "false");
-            break;
-
-        case EXPR_STRING:
-            printf("STRING(\"%.*s\")\n",
-                   (int)expr->as.string.len,
-                   expr->as.string.data);
-            break;
-
-        case EXPR_VAR:
-            printf("VAR(%s)\n", expr->as.var.name);
-            break;
-
-        case EXPR_UNARY:
-            switch (expr->as.unary.op) {
-                case UNOP_NEG: printf("UNARY(-)\n"); break;
-                case UNOP_NOT: printf("UNARY(not)\n"); break;
-            }
-            print_expr(expr->as.unary.rhs, indent + 1);
-            break;
-
-        case EXPR_BINARY:
-            switch (expr->as.binary.op) {
-                case BIN_ADD: printf("BINARY(+)\n"); break;
-                case BIN_SUB: printf("BINARY(-)\n"); break;
-                case BIN_MUL: printf("BINARY(*)\n"); break;
-                case BIN_DIV: printf("BINARY(/)\n"); break;
-                case BIN_EQ:  printf("BINARY(==)\n"); break;
-                case BIN_NEQ: printf("BINARY(!=)\n"); break;
-                case BIN_LT:  printf("BINARY(<)\n"); break;
-                case BIN_LTE: printf("BINARY(<=)\n"); break;
-                case BIN_GT:  printf("BINARY(>)\n"); break;
-                case BIN_GTE: printf("BINARY(>=)\n"); break;
-                case BIN_AND: printf("BINARY(and)\n"); break;
-                case BIN_OR:  printf("BINARY(or)\n"); break;
-                default: printf("BINARY(?)\n"); break;
-            }
-
-            print_expr(expr->as.binary.lhs, indent + 1);
-            print_expr(expr->as.binary.rhs, indent + 1);
-            break;
-
-        default:
-            printf("UNKNOWN_EXPR\n");
-            break;
-    }
 }
