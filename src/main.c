@@ -1,13 +1,13 @@
-#include <stdio.h>
 #include "lexer.h"
 #include "parser.h"
 #include "interp.h"
 #include "env.h"
+#include <stdio.h>
 
 int main(void) {
-    // const char *source = "1 + 2 < 5";
-    // const char *source = "1 + 2 == 3";
-    const char *source = "1 < 2 == 1 < 3";
+    const char *source =
+        "1 + 2 < 5\n"
+        "1 + 2 == 4\n";
 
     Lexer lexer;
     lexer_init(&lexer, source);
@@ -15,9 +15,11 @@ int main(void) {
     Parser parser;
     parser_init(&parser, &lexer);
 
-    Expr *expr = parser_parse_expression(&parser);
+    Program *program = parse_program(&parser);
 
-    print_expr(expr, 0);
+    Env *global = env_create(NULL);
+
+    eval_program(program, global);
 
     return 0;
 }
