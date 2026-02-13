@@ -258,8 +258,8 @@ static Expr *parse_primary(Parser *p) {
 
     printf("Unexpected token\n");
     exit(1);
+    return NULL;
 }
-
 
 static Stmt *parse_do(Parser *p) {
     advance(p);  // consume 'do'
@@ -330,15 +330,105 @@ static Stmt *parse_do(Parser *p) {
     return stmt;
 }
 
-
 static Stmt *parse_fn_def(Parser *p) {
-    printf("parse_fn_def: not implemented yet\n");
-    exit(1);
+    advance(p);  // consume 'fn'
+
+    if (p->current.type != TOK_IDENT) {
+        printf("Expected function name after fn\n");
+        exit(1);
+    }
+
+    Token name_tok = p->current;
+    advance(p);  // consume name
+
+    if (p->current.type != TOK_LPAREN) {
+        printf("Expected '(' after function name\n");
+        exit(1);
+    }
+    advance(p);  // consume '('
+
+    char **params = NULL;
+    size_t param_count = 0;
+
+    if (p->current.type != TOK_RPAREN) {
+        while (1) {
+            if (p->current.type != TOK_IDENT) {
+                printf("Expected parameter name\n");
+                exit(1);
+            }
+
+            params = realloc(params, sizeof(char *) * (param_count + 1));
+            params[param_count++] = strndup(p->current.start, p->current.length);
+            advance(p);  // consume parameter
+
+            if (p->current.type == TOK_COMMA) {
+                advance(p);  // consume ','
+                continue;
+            }
+
+            break;
+        }
+    }
+
+    if (p->current.type != TOK_RPAREN) {
+        printf("Expected ')' after parameter list\n");
+        exit(1);
+    }
+    advance(p);  // consume ')'
+
+    if (p->current.type != TOK_NEWLINE) {
+        printf("Expected newline after function signature\n");
+        exit(1);
+    }
+    advance(p);  // consume newline
+
+    Stmt **body = NULL;
+    size_t body_count = 0;
+
+    while (p->current.type != TOK_END && p->current.type != TOK_EOF) {
+        Stmt *stmt = parse_statement(p);
+
+        body = realloc(body, sizeof(Stmt *) * (body_count + 1));
+        body[body_count++] = stmt;
+
+        while (p->current.type == TOK_NEWLINE)
+            advance(p);
+    }
+
+    if (p->current.type != TOK_END) {
+        printf("Expected 'end' to close function\n");
+        exit(1);
+    }
+    advance(p);  // consume 'end'
+
+    Stmt *stmt = new_stmt(STMT_FNDEF);
+    stmt->as.fn_def.name = strndup(name_tok.start, name_tok.length);
+    stmt->as.fn_def.params = params;
+    stmt->as.fn_def.param_count = param_count;
+    stmt->as.fn_def.body = body;
+    stmt->as.fn_def.body_count = body_count;
+
+    return stmt;
 }
 
 static Stmt *parse_return(Parser *p) {
-    printf("parse_return: not implemented yet\n");
-    exit(1);
+    advance(p);  // consume 'return'
+
+    /* In this language, return requires an expression value. */
+    if (p->current.type == TOK_NEWLINE ||
+        p->current.type == TOK_END ||
+        p->current.type == TOK_ELSE ||
+        p->current.type == TOK_UNTIL ||
+        p->current.type == TOK_EOF) {
+        printf("Expected expression after return\n");
+        exit(1);
+    }
+
+    Expr *value = parse_expression(p);
+
+    Stmt *stmt = new_stmt(STMT_RETURN);
+    stmt->as.return_stmt.value = value;
+    return stmt;
 }
 
 /* =========================

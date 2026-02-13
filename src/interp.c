@@ -241,6 +241,20 @@ static EvalResult eval_do_stmt(Stmt *stmt, Env *env) {
 }
 
 
+static EvalResult eval_return_stmt(Stmt *stmt, Env *env) {
+    if (stmt->as.return_stmt.value == NULL) {
+        runtime_error("return requires a value");
+    }
+
+    Value v = eval_expr(stmt->as.return_stmt.value, env);
+
+    EvalResult r;
+    r.has_return = 1;
+    r.value = v;
+    return r;
+}
+
+
 
 
 
@@ -332,6 +346,9 @@ EvalResult eval_stmt(Stmt *stmt, Env *env) {
         case STMT_DO:
             return eval_do_stmt(stmt, env);
 
+        case STMT_RETURN:
+            return eval_return_stmt(stmt, env);
+
 
         default:
             runtime_error("Unsupported statement");
@@ -346,11 +363,11 @@ EvalResult eval_stmt(Stmt *stmt, Env *env) {
 EvalResult eval_program(Program *program, Env *env) {
     for (size_t i = 0; i < program->count; i++) {
         EvalResult r = eval_stmt(program->stmts[i], env);
-        if (r.has_return)
-            return r;
+        if (r.has_return) {
+            runtime_error("return is only valid inside functions");
+        }
     }
 
     EvalResult ok = {0};
     return ok;
 }
-
