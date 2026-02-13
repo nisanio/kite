@@ -3,13 +3,15 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 typedef enum {
     VAL_INT,
     VAL_STRING,
     VAL_ARRAY,
     VAL_FUNCTION,
-    VAL_BUILTIN
+    VAL_BUILTIN,
+    VAL_BOOL
 } ValueType;
 
 typedef struct Value Value;
@@ -39,6 +41,7 @@ struct Value {
         Array array_val;
         Function *fn_val;
         BuiltinFn builtin_val;
+        bool bool_val;
     } as;
 };
 
@@ -52,12 +55,11 @@ typedef struct Function {
     Env *closure;  // entorno donde se definió
 } Function;
 
-
-
 /* Constructors */
 Value value_int(int64_t x);
 Value value_string(const char *s);
 Value value_array(void);
+Value value_bool(bool b);
 
 /* Memory management */
 void value_free(Value v);

@@ -36,6 +36,13 @@ Value value_array(void) {
     return v;
 }
 
+Value value_bool(bool b) {
+    Value v;
+    v.type = VAL_BOOL;
+    v.as.bool_val = b;
+    return v;
+}
+
 /* ===== Internal helpers ===== */
 
 static void array_free(Array *arr) {
@@ -62,6 +69,10 @@ void value_free(Value v) {
             break;
 
         case VAL_BUILTIN:
+            /* Nothing to free */
+            break;
+
+        case VAL_BOOL:
             /* Nothing to free */
             break;
 
