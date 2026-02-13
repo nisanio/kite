@@ -5,9 +5,9 @@
 #include "env.h"
 
 int main(void) {
-    const char *source =
-        "x = 10\n"
-        "x + 2\n";
+    // const char *source = "1 + 2 < 5";
+    // const char *source = "1 + 2 == 3";
+    const char *source = "1 < 2 == 1 < 3";
 
     Lexer lexer;
     lexer_init(&lexer, source);
@@ -15,11 +15,9 @@ int main(void) {
     Parser parser;
     parser_init(&parser, &lexer);
 
-    Program *program = parse_program(&parser);
+    Expr *expr = parser_parse_expression(&parser);
 
-    Env *env = env_create(NULL);
-
-    eval_program(program, env);
+    print_expr(expr, 0);
 
     return 0;
 }

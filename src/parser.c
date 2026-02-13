@@ -3,11 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 
-
 /* Forward declarations */
 
 static void advance(Parser *p);
 static Expr *parse_expression(Parser *p);
+static Expr *parse_equality(Parser *p);
+static Expr *parse_comparison(Parser *p);
 static Expr *parse_term(Parser *p);
 static Expr *parse_factor(Parser *p);
 static Expr *parse_unary(Parser *p);
@@ -51,7 +52,63 @@ static Expr *new_expr(ExprKind kind) {
 }
 
 static Expr *parse_expression(Parser *p) {
-    return parse_term(p);
+    return parse_equality(p);
+}
+
+/* equality: == != */
+static Expr *parse_equality(Parser *p) {
+    Expr *expr = parse_comparison(p);
+
+    while (p->current.type == TOK_EQEQ ||
+           p->current.type == TOK_NEQ) {
+
+        TokenType op = p->current.type;
+        advance(p);
+
+        Expr *right = parse_comparison(p);
+
+        Expr *binary = new_expr(EXPR_BINARY);
+        binary->as.binary.op = (op == TOK_EQEQ) ? BIN_EQ : BIN_NEQ;
+        binary->as.binary.lhs = expr;
+        binary->as.binary.rhs = right;
+
+        expr = binary;
+    }
+
+    return expr;
+}
+
+/* comparison: < <= > >= */
+static Expr *parse_comparison(Parser *p) {
+    Expr *expr = parse_term(p);
+
+    while (p->current.type == TOK_LT  ||
+           p->current.type == TOK_LTE ||
+           p->current.type == TOK_GT  ||
+           p->current.type == TOK_GTE) {
+
+        TokenType op = p->current.type;
+        advance(p);
+
+        Expr *right = parse_term(p);
+
+        Expr *binary = new_expr(EXPR_BINARY);
+
+        switch (op) {
+            case TOK_LT:  binary->as.binary.op = BIN_LT; break;
+            case TOK_LTE: binary->as.binary.op = BIN_LTE; break;
+            case TOK_GT:  binary->as.binary.op = BIN_GT; break;
+            case TOK_GTE: binary->as.binary.op = BIN_GTE; break;
+            default: break;
+        }
+
+        binary->as.binary.lhs = expr;
+        binary->as.binary.rhs = right;
+
+        expr = binary;
+    }
+
+    return expr;
 }
 
 static Expr *parse_term(Parser *p) {
@@ -157,17 +214,15 @@ static Stmt *new_stmt(StmtKind kind) {
 
 static Stmt *parse_statement(Parser *p) {
 
-    /* Assignment: IDENT = expr */
     if (p->current.type == TOK_IDENT) {
         Token ident = p->current;
 
-        /* Proper lookahead: copy lexer state */
         Lexer saved = *(p->lexer);
         Token next = lexer_next(&saved);
 
         if (next.type == TOK_ASSIGN) {
-            advance(p);  /* consume IDENT */
-            advance(p);  /* consume '=' */
+            advance(p);
+            advance(p);
 
             Expr *value = parse_expression(p);
 
@@ -179,7 +234,6 @@ static Stmt *parse_statement(Parser *p) {
         }
     }
 
-    /* Otherwise: expression statement */
     Expr *expr = parse_expression(p);
 
     Stmt *stmt = new_stmt(STMT_EXPR);
@@ -187,7 +241,6 @@ static Stmt *parse_statement(Parser *p) {
 
     return stmt;
 }
-
 
 /* =========================
    Program
@@ -199,7 +252,6 @@ Program *parse_program(Parser *p) {
 
     while (p->current.type != TOK_EOF) {
 
-        /* Skip empty lines */
         while (p->current.type == TOK_NEWLINE) {
             advance(p);
         }
@@ -217,7 +269,6 @@ Program *parse_program(Parser *p) {
 
         program->stmts[program->count++] = stmt;
 
-        /* After a statement, consume trailing newlines */
         while (p->current.type == TOK_NEWLINE) {
             advance(p);
         }
@@ -225,8 +276,6 @@ Program *parse_program(Parser *p) {
 
     return program;
 }
-
-
 
 Expr *parser_parse_expression(Parser *p) {
     return parse_expression(p);
@@ -267,6 +316,12 @@ void print_expr(Expr *expr, int indent) {
                 case BIN_SUB: printf("BINARY(-)\n"); break;
                 case BIN_MUL: printf("BINARY(*)\n"); break;
                 case BIN_DIV: printf("BINARY(/)\n"); break;
+                case BIN_EQ:  printf("BINARY(==)\n"); break;
+                case BIN_NEQ: printf("BINARY(!=)\n"); break;
+                case BIN_LT:  printf("BINARY(<)\n"); break;
+                case BIN_LTE: printf("BINARY(<=)\n"); break;
+                case BIN_GT:  printf("BINARY(>)\n"); break;
+                case BIN_GTE: printf("BINARY(>=)\n"); break;
                 default: printf("BINARY(?)\n"); break;
             }
             print_expr(expr->as.binary.lhs, indent + 1);
