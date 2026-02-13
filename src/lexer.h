@@ -22,6 +22,8 @@ typedef enum {
     TOK_AND,
     TOK_OR,
     TOK_NOT,
+    TOK_TRUE,
+    TOK_FALSE,
 
     /* Operators */
     TOK_ASSIGN,     // =

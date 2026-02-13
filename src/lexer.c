@@ -83,6 +83,8 @@ static TokenType keyword_type(const char *start, size_t len) {
     if (len == 3 && strncmp(start, "and", 3) == 0) return TOK_AND;
     if (len == 2 && strncmp(start, "or", 2) == 0) return TOK_OR;
     if (len == 3 && strncmp(start, "not", 3) == 0) return TOK_NOT;
+    if (len == 4 && strncmp(start, "true", 4) == 0) return TOK_TRUE;
+    if (len == 5 && strncmp(start, "false", 5) == 0) return TOK_FALSE;
 
     return TOK_IDENT;
 }
