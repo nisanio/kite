@@ -27,10 +27,15 @@ static void runtime_error(const char *msg) {
    Expr evaluation (split)
    ========================= */
 
-static void eval_block(Stmt **stmts, size_t count, Env *env) {
+static EvalResult eval_block(Stmt **stmts, size_t count, Env *env) {
     for (size_t i = 0; i < count; i++) {
-        eval_stmt(stmts[i], env);
+        EvalResult r = eval_stmt(stmts[i], env);
+        if (r.has_return) {
+            return r;
+        }
     }
+    EvalResult ok = {0};
+    return ok;
 }
 
 static Value eval_int_expr(Expr *expr) {
@@ -188,7 +193,7 @@ static Value eval_binary_expr(Expr *expr, Env *env) {
     }
 }
 
-static void eval_do_stmt(Stmt *stmt, Env *env) {
+static EvalResult eval_do_stmt(Stmt *stmt, Env *env) {
 
     if (!stmt->as.do_stmt.is_post) {
         /* while-style */
@@ -201,19 +206,26 @@ static void eval_do_stmt(Stmt *stmt, Env *env) {
             if (!cond.as.bool_val)
                 break;
 
-            eval_block(stmt->as.do_stmt.body,
-                       stmt->as.do_stmt.body_count,
-                       env);
+            EvalResult r = eval_block(stmt->as.do_stmt.body,
+                                      stmt->as.do_stmt.body_count,
+                                      env);
+
+            if (r.has_return)
+                return r;
         }
 
-        return;
+        EvalResult ok = {0};
+        return ok;
     }
 
     /* repeat-style */
     while (1) {
-        eval_block(stmt->as.do_stmt.body,
-                   stmt->as.do_stmt.body_count,
-                   env);
+        EvalResult r = eval_block(stmt->as.do_stmt.body,
+                                  stmt->as.do_stmt.body_count,
+                                  env);
+
+        if (r.has_return)
+            return r;
 
         Value cond = eval_expr(stmt->as.do_stmt.cond, env);
 
@@ -223,7 +235,11 @@ static void eval_do_stmt(Stmt *stmt, Env *env) {
         if (cond.as.bool_val)
             break;
     }
+
+    EvalResult ok = {0};
+    return ok;
 }
+
 
 
 
@@ -279,7 +295,7 @@ static void eval_expr_stmt(Stmt *stmt, Env *env) {
     printf("=> <non-printable>\n");
 }
 
-static void eval_if_stmt(Stmt *stmt, Env *env) {
+static EvalResult eval_if_stmt(Stmt *stmt, Env *env) {
     Value cond = eval_expr(stmt->as.if_stmt.cond, env);
 
     if (!is_bool(cond)) {
@@ -287,14 +303,21 @@ static void eval_if_stmt(Stmt *stmt, Env *env) {
     }
 
     if (cond.as.bool_val) {
-        eval_block(stmt->as.if_stmt.then_body, stmt->as.if_stmt.then_count, env);
+        return eval_block(stmt->as.if_stmt.then_body,
+                          stmt->as.if_stmt.then_count,
+                          env);
     } else {
-        eval_block(stmt->as.if_stmt.else_body, stmt->as.if_stmt.else_count, env);
+        return eval_block(stmt->as.if_stmt.else_body,
+                          stmt->as.if_stmt.else_count,
+                          env);
     }
 }
 
-void eval_stmt(Stmt *stmt, Env *env) {
+
+EvalResult eval_stmt(Stmt *stmt, Env *env) {
+
     switch (stmt->kind) {
+
         case STMT_ASSIGN:
             eval_assign_stmt(stmt, env);
             break;
@@ -304,21 +327,30 @@ void eval_stmt(Stmt *stmt, Env *env) {
             break;
 
         case STMT_IF:
-            eval_if_stmt(stmt, env);
-            break;
-        
+            return eval_if_stmt(stmt, env);
+
         case STMT_DO:
-            eval_do_stmt(stmt, env);
-            break;
+            return eval_do_stmt(stmt, env);
+
 
         default:
             runtime_error("Unsupported statement");
             break;
     }
+
+    EvalResult ok = {0};
+    return ok;
 }
 
-void eval_program(Program *program, Env *env) {
+
+EvalResult eval_program(Program *program, Env *env) {
     for (size_t i = 0; i < program->count; i++) {
-        eval_stmt(program->stmts[i], env);
+        EvalResult r = eval_stmt(program->stmts[i], env);
+        if (r.has_return)
+            return r;
     }
+
+    EvalResult ok = {0};
+    return ok;
 }
+
