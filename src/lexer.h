@@ -42,6 +42,7 @@ typedef enum {
     TOK_LBRACK,     // [
     TOK_RBRACK,     // ]
     TOK_COMMA,      // ,
+    TOK_NEWLINE,
 
     TOK_EOF,
     TOK_ERROR

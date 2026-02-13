@@ -37,11 +37,11 @@ static void skip_whitespace(Lexer *l) {
                 advance(l);
                 break;
 
-            case '\n':
-                advance(l);
-                l->line++;
-                l->col = 1;
-                break;
+            // case '\n':
+            //     advance(l);
+            //     l->line++;
+            //     l->col = 1;
+            //     break;
 
             case '#':
                 while (peek(l) != '\n' && !is_at_end(l)) {
@@ -109,6 +109,11 @@ Token lexer_next(Lexer *l) {
 
     char c = advance(l);
 
+    if (c == '\n') {
+        l->line++;
+        l->col = 1;
+        return make_token(l, TOK_NEWLINE, start);
+    }
     /* Numbers */
     if (isdigit(c)) {
         while (isdigit(peek(l))) advance(l);

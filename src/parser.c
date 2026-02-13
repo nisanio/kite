@@ -12,6 +12,7 @@ static Expr *parse_term(Parser *p);
 static Expr *parse_factor(Parser *p);
 static Expr *parse_unary(Parser *p);
 static Expr *parse_primary(Parser *p);
+static Stmt *parse_statement(Parser *p);
 
 /* =========================
    Utilities
@@ -148,18 +149,84 @@ static Expr *parse_primary(Parser *p) {
     exit(1);
 }
 
+static Stmt *new_stmt(StmtKind kind) {
+    Stmt *s = malloc(sizeof(Stmt));
+    s->kind = kind;
+    return s;
+}
+
+static Stmt *parse_statement(Parser *p) {
+
+    /* Assignment: IDENT = expr */
+    if (p->current.type == TOK_IDENT) {
+        Token ident = p->current;
+
+        /* Proper lookahead: copy lexer state */
+        Lexer saved = *(p->lexer);
+        Token next = lexer_next(&saved);
+
+        if (next.type == TOK_ASSIGN) {
+            advance(p);  /* consume IDENT */
+            advance(p);  /* consume '=' */
+
+            Expr *value = parse_expression(p);
+
+            Stmt *stmt = new_stmt(STMT_ASSIGN);
+            stmt->as.assign.name = strndup(ident.start, ident.length);
+            stmt->as.assign.value = value;
+
+            return stmt;
+        }
+    }
+
+    /* Otherwise: expression statement */
+    Expr *expr = parse_expression(p);
+
+    Stmt *stmt = new_stmt(STMT_EXPR);
+    stmt->as.expr.expr = expr;
+
+    return stmt;
+}
+
+
 /* =========================
    Program
    ========================= */
-
 Program *parse_program(Parser *p) {
-    (void)p;
-
     Program *program = malloc(sizeof(Program));
     program->stmts = NULL;
     program->count = 0;
+
+    while (p->current.type != TOK_EOF) {
+
+        /* Skip empty lines */
+        while (p->current.type == TOK_NEWLINE) {
+            advance(p);
+        }
+
+        if (p->current.type == TOK_EOF) {
+            break;
+        }
+
+        Stmt *stmt = parse_statement(p);
+
+        program->stmts = realloc(
+            program->stmts,
+            sizeof(Stmt*) * (program->count + 1)
+        );
+
+        program->stmts[program->count++] = stmt;
+
+        /* After a statement, consume trailing newlines */
+        while (p->current.type == TOK_NEWLINE) {
+            advance(p);
+        }
+    }
+
     return program;
 }
+
+
 
 Expr *parser_parse_expression(Parser *p) {
     return parse_expression(p);

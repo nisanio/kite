@@ -68,3 +68,33 @@ Value eval_expr(Expr *expr, Env *env) {
     printf("Unsupported expression\n");
     exit(1);
 }
+
+void eval_stmt(Stmt *stmt, Env *env) {
+    switch (stmt->kind) {
+
+        case STMT_ASSIGN: {
+            Value value = eval_expr(stmt->as.assign.value, env);
+
+            if (!env_assign(env, stmt->as.assign.name, value)) {
+                env_define(env, stmt->as.assign.name, value);
+            }
+            break;
+        }
+
+        case STMT_EXPR: {
+            Value value = eval_expr(stmt->as.expr.expr, env);
+            printf("=> %lld\n", (long long)value.as.int_val);
+            break;
+        }
+
+        default:
+            printf("Unsupported statement\n");
+            exit(1);
+    }
+}
+
+void eval_program(Program *program, Env *env) {
+    for (size_t i = 0; i < program->count; i++) {
+        eval_stmt(program->stmts[i], env);
+    }
+}

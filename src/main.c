@@ -5,7 +5,9 @@
 #include "env.h"
 
 int main(void) {
-    const char *source = "1 + 2 * 3";
+    const char *source =
+        "x = 10\n"
+        "x + 2\n";
 
     Lexer lexer;
     lexer_init(&lexer, source);
@@ -13,13 +15,11 @@ int main(void) {
     Parser parser;
     parser_init(&parser, &lexer);
 
-    Expr *expr = parser_parse_expression(&parser);
+    Program *program = parse_program(&parser);
 
     Env *env = env_create(NULL);
 
-    Value result = eval_expr(expr, env);
-
-    printf("Result = %lld\n", (long long)result.as.int_val);
+    eval_program(program, env);
 
     return 0;
 }
