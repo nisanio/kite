@@ -131,7 +131,11 @@ static Value eval_arithmetic_binary(BinOp op, Value left, Value right) {
         case BIN_ADD: return value_int(left.as.int_val + right.as.int_val);
         case BIN_SUB: return value_int(left.as.int_val - right.as.int_val);
         case BIN_MUL: return value_int(left.as.int_val * right.as.int_val);
-        case BIN_DIV: return value_int(left.as.int_val / right.as.int_val);
+        case BIN_DIV:
+            if (right.as.int_val == 0) {
+                runtime_error("Division by zero");
+            }
+            return value_int(left.as.int_val / right.as.int_val);
         default:
             runtime_error("Unsupported arithmetic operator");
             return value_int(0);
