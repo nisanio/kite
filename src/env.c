@@ -81,3 +81,14 @@ int env_get(Env *env, const char *name, Value *out) {
     }
     return 0;
 }
+
+int env_has_local(Env *env, const char *name) {
+    EnvEntry *entry = env->head;
+    while (entry) {
+        if (strcmp(entry->name, name) == 0) {
+            return 1;
+        }
+        entry = entry->next;
+    }
+    return 0;
+}

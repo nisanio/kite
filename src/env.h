@@ -11,5 +11,5 @@ void env_free(Env *env);
 void env_define(Env *env, const char *name, Value value);
 int  env_assign(Env *env, const char *name, Value value);
 int  env_get(Env *env, const char *name, Value *out);
-
+int env_has_local(Env *env, const char *name);
 #endif

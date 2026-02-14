@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
+
 /* Forward (needed because eval_stmt uses it before definition) */
 static void eval_fn_def_stmt(Stmt *stmt, Env *env);
 
@@ -17,10 +19,23 @@ static int is_int(Value v) {
     return v.type == VAL_INT;
 }
 
+
+static void runtime_error_stmt(Stmt *stmt, const char *msg) {
+    printf("[line %d:%d] %s\n", stmt->line, stmt->col, msg);
+    exit(1);
+}
+    
+
 static void runtime_error(const char *msg) {
     printf("%s\n", msg);
     exit(1);
 }
+
+static void runtime_error_at(int line, int col, const char *msg) {
+    printf("[line %d, col %d] %s\n", line, col, msg);
+    exit(1);
+}
+
 
 /* =========================
    Expr evaluation (split)
@@ -48,11 +63,12 @@ static Value eval_bool_expr(Expr *expr) {
 static Value eval_var_expr(Expr *expr, Env *env) {
     Value v;
     if (!env_get(env, expr->as.var.name, &v)) {
-        printf("Undefined variable: %s\n", expr->as.var.name);
-        exit(1);
+        runtime_error_at(expr->line, expr->col,
+                         "Undefined variable");
     }
     return v;
 }
+
 
 static Value eval_unary_expr(Expr *expr, Env *env) {
     Value right = eval_expr(expr->as.unary.rhs, env);
@@ -121,12 +137,12 @@ static Value eval_logical_binary(Expr *expr, Env *env) {
     return value_bool(0);
 }
 
-static Value eval_arithmetic_binary(BinOp op, Value left, Value right) {
+static Value eval_arithmetic_binary(Expr *expr, Value left, Value right){
     if (!is_int(left) || !is_int(right)) {
         runtime_error("Arithmetic operators require integers");
     }
 
-    switch (op) {
+    switch (expr->as.binary.op) {
         case BIN_ADD:
             return value_int(left.as.int_val + right.as.int_val);
         case BIN_SUB:
@@ -135,7 +151,7 @@ static Value eval_arithmetic_binary(BinOp op, Value left, Value right) {
             return value_int(left.as.int_val * right.as.int_val);
         case BIN_DIV:
             if (right.as.int_val == 0) {
-                runtime_error("Division by zero");
+               runtime_error_at(expr->line, expr->col, "Division by zero");
             }
             return value_int(left.as.int_val / right.as.int_val);
         default:
@@ -195,7 +211,7 @@ static Value eval_binary_expr(Expr *expr, Env *env) {
         case BIN_SUB:
         case BIN_MUL:
         case BIN_DIV:
-            return eval_arithmetic_binary(op, left, right);
+            return eval_arithmetic_binary(expr, left, right);
 
         case BIN_EQ:
         case BIN_NEQ:
@@ -281,14 +297,18 @@ static Value eval_call_expr(Expr *expr, Env *env) {
     }
 
     if (callee.type != VAL_FUNCTION) {
-        runtime_error("Attempt to call non-function value");
+        runtime_error_at(expr->line, expr->col,
+                     "Attempt to call non-function value");
     }
+
 
     Function *fn = callee.as.fn_val;
 
-    if (expr->as.call.argc != fn->param_count) {
-        runtime_error("Argument count mismatch");
+   if (expr->as.call.argc != fn->param_count) {
+        runtime_error_at(expr->line, expr->col,
+                        "Argument count mismatch");
     }
+
 
     /* Create new environment for invocation */
     Env *local = env_create(fn->closure);
@@ -421,6 +441,10 @@ EvalResult eval_stmt(Stmt *stmt, Env *env) {
 
 static void eval_fn_def_stmt(Stmt *stmt, Env *env) {
     /* Create a temporary wrapper; env_define will clone it (heap-owning). */
+    if (env_has_local(env, stmt->as.fn_def.name)) {
+        runtime_error_at(stmt->line, stmt->col,
+                         "Function redefinition not allowed");
+    }
     Function tmp;
     tmp.params = stmt->as.fn_def.params;
     tmp.param_count = stmt->as.fn_def.param_count;
