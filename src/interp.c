@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
+/* Forward (needed because eval_stmt uses it before definition) */
+static void eval_fn_def_stmt(Stmt *stmt, Env *env);
 
 /* =========================
    Helpers
@@ -20,8 +21,6 @@ static void runtime_error(const char *msg) {
     printf("%s\n", msg);
     exit(1);
 }
-
-
 
 /* =========================
    Expr evaluation (split)
@@ -128,9 +127,12 @@ static Value eval_arithmetic_binary(BinOp op, Value left, Value right) {
     }
 
     switch (op) {
-        case BIN_ADD: return value_int(left.as.int_val + right.as.int_val);
-        case BIN_SUB: return value_int(left.as.int_val - right.as.int_val);
-        case BIN_MUL: return value_int(left.as.int_val * right.as.int_val);
+        case BIN_ADD:
+            return value_int(left.as.int_val + right.as.int_val);
+        case BIN_SUB:
+            return value_int(left.as.int_val - right.as.int_val);
+        case BIN_MUL:
+            return value_int(left.as.int_val * right.as.int_val);
         case BIN_DIV:
             if (right.as.int_val == 0) {
                 runtime_error("Division by zero");
@@ -150,12 +152,24 @@ static Value eval_comparison_binary(BinOp op, Value left, Value right) {
     int result = 0;
 
     switch (op) {
-        case BIN_EQ:  result = (left.as.int_val == right.as.int_val); break;
-        case BIN_NEQ: result = (left.as.int_val != right.as.int_val); break;
-        case BIN_LT:  result = (left.as.int_val <  right.as.int_val); break;
-        case BIN_LTE: result = (left.as.int_val <= right.as.int_val); break;
-        case BIN_GT:  result = (left.as.int_val >  right.as.int_val); break;
-        case BIN_GTE: result = (left.as.int_val >= right.as.int_val); break;
+        case BIN_EQ:
+            result = (left.as.int_val == right.as.int_val);
+            break;
+        case BIN_NEQ:
+            result = (left.as.int_val != right.as.int_val);
+            break;
+        case BIN_LT:
+            result = (left.as.int_val < right.as.int_val);
+            break;
+        case BIN_LTE:
+            result = (left.as.int_val <= right.as.int_val);
+            break;
+        case BIN_GT:
+            result = (left.as.int_val > right.as.int_val);
+            break;
+        case BIN_GTE:
+            result = (left.as.int_val >= right.as.int_val);
+            break;
         default:
             runtime_error("Unsupported comparison operator");
             break;
@@ -244,7 +258,6 @@ static EvalResult eval_do_stmt(Stmt *stmt, Env *env) {
     return ok;
 }
 
-
 static EvalResult eval_return_stmt(Stmt *stmt, Env *env) {
     if (stmt->as.return_stmt.value == NULL) {
         runtime_error("return requires a value");
@@ -297,11 +310,8 @@ static Value eval_call_expr(Expr *expr, Env *env) {
 
     /* No explicit return */
     runtime_error("Function returned without value");
-    return value_int(0);  /* unreachable */
+    return value_int(0); /* unreachable */
 }
-
-
-
 
 Value eval_expr(Expr *expr, Env *env) {
     switch (expr->kind) {
@@ -319,7 +329,7 @@ Value eval_expr(Expr *expr, Env *env) {
 
         case EXPR_BINARY:
             return eval_binary_expr(expr, env);
-        
+
         case EXPR_CALL:
             return eval_call_expr(expr, env);
 
@@ -375,7 +385,6 @@ static EvalResult eval_if_stmt(Stmt *stmt, Env *env) {
     }
 }
 
-
 EvalResult eval_stmt(Stmt *stmt, Env *env) {
 
     switch (stmt->kind) {
@@ -399,8 +408,8 @@ EvalResult eval_stmt(Stmt *stmt, Env *env) {
 
         case STMT_FNDEF:
             eval_fn_def_stmt(stmt, env);
-        break;
-        
+            break;
+
         default:
             runtime_error("Unsupported statement");
             break;
@@ -411,26 +420,20 @@ EvalResult eval_stmt(Stmt *stmt, Env *env) {
 }
 
 static void eval_fn_def_stmt(Stmt *stmt, Env *env) {
-
-    Function *fn = malloc(sizeof(Function));
-    if (!fn) {
-        runtime_error("Out of memory allocating function");
-    }
-
-    fn->params = stmt->as.fn_def.params;
-    fn->param_count = stmt->as.fn_def.param_count;
-    fn->body = stmt->as.fn_def.body;
-    fn->body_count = stmt->as.fn_def.body_count;
-    fn->closure = env;  // capture lexical environment
+    /* Create a temporary wrapper; env_define will clone it (heap-owning). */
+    Function tmp;
+    tmp.params = stmt->as.fn_def.params;
+    tmp.param_count = stmt->as.fn_def.param_count;
+    tmp.body = stmt->as.fn_def.body;
+    tmp.body_count = stmt->as.fn_def.body_count;
+    tmp.closure = env;
 
     Value v;
     v.type = VAL_FUNCTION;
-    v.as.fn_val = fn;
+    v.as.fn_val = &tmp;
 
     env_define(env, stmt->as.fn_def.name, v);
 }
-
-
 
 EvalResult eval_program(Program *program, Env *env) {
     for (size_t i = 0; i < program->count; i++) {

@@ -44,7 +44,7 @@ void env_define(Env *env, const char *name, Value value) {
     if (!entry) exit(1);
 
     entry->name = strdup(name);
-    entry->value = value;
+    entry->value = value_clone(value); /* Env owns stored values */
     entry->next = env->head;
     env->head = entry;
 }
@@ -57,7 +57,7 @@ int env_assign(Env *env, const char *name, Value value) {
         while (entry) {
             if (strcmp(entry->name, name) == 0) {
                 value_free(entry->value);
-                entry->value = value;
+                entry->value = value_clone(value); /* Env owns stored values */
                 return 1;
             }
             entry = entry->next;
@@ -73,7 +73,7 @@ int env_get(Env *env, const char *name, Value *out) {
         EnvEntry *entry = e->head;
         while (entry) {
             if (strcmp(entry->name, name) == 0) {
-                *out = entry->value;
+                *out = entry->value; /* return by value (non-owning copy) */
                 return 1;
             }
             entry = entry->next;

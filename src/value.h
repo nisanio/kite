@@ -62,6 +62,7 @@ Value value_array(void);
 Value value_bool(bool b);
 
 /* Memory management */
+Value value_clone(Value v);
 void value_free(Value v);
 
 #endif

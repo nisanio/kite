@@ -50,9 +50,91 @@ static void array_free(Array *arr) {
         value_free(arr->items[i]);
     }
     free(arr->items);
+    arr->items = NULL;
+    arr->count = 0;
+    arr->capacity = 0;
+}
+
+static Array array_clone(const Array *src) {
+    Array dst;
+    dst.count = src->count;
+    dst.capacity = src->count;
+    dst.items = NULL;
+
+    if (src->count == 0) {
+        return dst;
+    }
+
+    dst.items = (Value *)malloc(sizeof(Value) * src->count);
+    if (!dst.items) {
+        exit(1);
+    }
+
+    for (size_t i = 0; i < src->count; i++) {
+        dst.items[i] = value_clone(src->items[i]);
+    }
+
+    return dst;
 }
 
 /* ===== Memory management ===== */
+
+Value value_clone(Value v) {
+    Value out;
+    out.type = v.type;
+
+    switch (v.type) {
+        case VAL_INT:
+            out.as.int_val = v.as.int_val;
+            break;
+
+        case VAL_BOOL:
+            out.as.bool_val = v.as.bool_val;
+            break;
+
+        case VAL_BUILTIN:
+            out.as.builtin_val = v.as.builtin_val;
+            break;
+
+        case VAL_STRING: {
+            size_t len = v.as.str_val.len;
+            out.as.str_val.data = (char *)malloc(len + 1);
+            if (!out.as.str_val.data) {
+                exit(1);
+            }
+            memcpy(out.as.str_val.data, v.as.str_val.data, len + 1);
+            out.as.str_val.len = len;
+        } break;
+
+        case VAL_ARRAY:
+            out.as.array_val = array_clone(&v.as.array_val);
+            break;
+
+        case VAL_FUNCTION: {
+            Function *src = v.as.fn_val;
+            Function *fn = (Function *)malloc(sizeof(Function));
+            if (!fn) {
+                exit(1);
+            }
+
+            /* Shallow copy of function "shape": params/body belong to AST.
+               Wrapper is owned by Value/Env and must be freed. */
+            fn->params = src->params;
+            fn->param_count = src->param_count;
+            fn->body = src->body;
+            fn->body_count = src->body_count;
+            fn->closure = src->closure;
+
+            out.as.fn_val = fn;
+        } break;
+
+        default:
+            /* Should not happen */
+            break;
+    }
+
+    return out;
+}
 
 void value_free(Value v) {
     switch (v.type) {
@@ -65,7 +147,7 @@ void value_free(Value v) {
             break;
 
         case VAL_FUNCTION:
-            /* Managed elsewhere */
+            free(v.as.fn_val);
             break;
 
         case VAL_BUILTIN:
