@@ -254,6 +254,47 @@ static EvalResult eval_return_stmt(Stmt *stmt, Env *env) {
     return r;
 }
 
+static Value eval_call_expr(Expr *expr, Env *env) {
+
+    Value callee;
+
+    if (!env_get(env, expr->as.call.callee, &callee)) {
+        printf("Undefined function: %s\n", expr->as.call.callee);
+        exit(1);
+    }
+
+    if (callee.type != VAL_FUNCTION) {
+        runtime_error("Attempt to call non-function value");
+    }
+
+    Function *fn = callee.as.fn_val;
+
+    if (expr->as.call.argc != fn->param_count) {
+        runtime_error("Argument count mismatch");
+    }
+
+    /* Create new environment for invocation */
+    Env *local = env_create(fn->closure);
+
+    /* Bind parameters */
+    for (size_t i = 0; i < fn->param_count; i++) {
+        Value arg = eval_expr(expr->as.call.args[i], env);
+        env_define(local, fn->params[i], arg);
+    }
+
+    /* Execute function body */
+    EvalResult result = eval_block(fn->body, fn->body_count, local);
+
+    env_free(local);
+
+    if (result.has_return) {
+        return result.value;
+    }
+
+    /* No explicit return */
+    runtime_error("Function returned without value");
+    return value_int(0);  /* unreachable */
+}
 
 
 
@@ -274,6 +315,9 @@ Value eval_expr(Expr *expr, Env *env) {
 
         case EXPR_BINARY:
             return eval_binary_expr(expr, env);
+        
+        case EXPR_CALL:
+            return eval_call_expr(expr, env);
 
         default:
             runtime_error("Unsupported expression");
@@ -349,7 +393,10 @@ EvalResult eval_stmt(Stmt *stmt, Env *env) {
         case STMT_RETURN:
             return eval_return_stmt(stmt, env);
 
-
+        case STMT_FNDEF:
+            eval_fn_def_stmt(stmt, env);
+        break;
+        
         default:
             runtime_error("Unsupported statement");
             break;
@@ -358,6 +405,27 @@ EvalResult eval_stmt(Stmt *stmt, Env *env) {
     EvalResult ok = {0};
     return ok;
 }
+
+static void eval_fn_def_stmt(Stmt *stmt, Env *env) {
+
+    Function *fn = malloc(sizeof(Function));
+    if (!fn) {
+        runtime_error("Out of memory allocating function");
+    }
+
+    fn->params = stmt->as.fn_def.params;
+    fn->param_count = stmt->as.fn_def.param_count;
+    fn->body = stmt->as.fn_def.body;
+    fn->body_count = stmt->as.fn_def.body_count;
+    fn->closure = env;  // capture lexical environment
+
+    Value v;
+    v.type = VAL_FUNCTION;
+    v.as.fn_val = fn;
+
+    env_define(env, stmt->as.fn_def.name, v);
+}
+
 
 
 EvalResult eval_program(Program *program, Env *env) {

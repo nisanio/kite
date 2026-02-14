@@ -51,11 +51,20 @@ void parser_init(Parser *p, Lexer *lexer) {
    Expression parsing
    ========================= */
 
-static Expr *new_expr(ExprKind kind) {
+static Expr *new_expr(Parser *p, ExprKind kind) {
     Expr *e = malloc(sizeof(Expr));
+    if (!e) {
+        printf("Out of memory\n");
+        exit(1);
+    }
+
     e->kind = kind;
+    e->line = p->previous.line;
+    e->col = p->previous.col;
+
     return e;
 }
+
 
 static Expr *parse_expression(Parser *p) {
     return parse_or(p);
@@ -68,7 +77,7 @@ static Expr *parse_or(Parser *p) {
         advance(p);
         Expr *right = parse_and(p);
 
-        Expr *binary = new_expr(EXPR_BINARY);
+        Expr *binary = new_expr(p, EXPR_BINARY);
         binary->as.binary.op = BIN_OR;
         binary->as.binary.lhs = expr;
         binary->as.binary.rhs = right;
@@ -86,7 +95,7 @@ static Expr *parse_and(Parser *p) {
         advance(p);
         Expr *right = parse_equality(p);
 
-        Expr *binary = new_expr(EXPR_BINARY);
+        Expr *binary = new_expr(p, EXPR_BINARY);
         binary->as.binary.op = BIN_AND;
         binary->as.binary.lhs = expr;
         binary->as.binary.rhs = right;
@@ -108,7 +117,7 @@ static Expr *parse_equality(Parser *p) {
 
         Expr *right = parse_comparison(p);
 
-        Expr *binary = new_expr(EXPR_BINARY);
+        Expr *binary = new_expr(p, EXPR_BINARY);
         binary->as.binary.op = (op == TOK_EQEQ) ? BIN_EQ : BIN_NEQ;
         binary->as.binary.lhs = expr;
         binary->as.binary.rhs = right;
@@ -132,7 +141,7 @@ static Expr *parse_comparison(Parser *p) {
 
         Expr *right = parse_term(p);
 
-        Expr *binary = new_expr(EXPR_BINARY);
+        Expr *binary = new_expr(p, EXPR_BINARY);
 
         switch (op) {
             case TOK_LT:  binary->as.binary.op = BIN_LT; break;
@@ -162,7 +171,7 @@ static Expr *parse_term(Parser *p) {
 
         Expr *right = parse_factor(p);
 
-        Expr *binary = new_expr(EXPR_BINARY);
+        Expr *binary = new_expr(p, EXPR_BINARY);
         binary->as.binary.op = (op == TOK_PLUS) ? BIN_ADD : BIN_SUB;
         binary->as.binary.lhs = expr;
         binary->as.binary.rhs = right;
@@ -184,7 +193,7 @@ static Expr *parse_factor(Parser *p) {
 
         Expr *right = parse_unary(p);
 
-        Expr *binary = new_expr(EXPR_BINARY);
+        Expr *binary = new_expr(p,EXPR_BINARY);
         binary->as.binary.op = (op == TOK_STAR) ? BIN_MUL : BIN_DIV;
         binary->as.binary.lhs = expr;
         binary->as.binary.rhs = right;
@@ -198,7 +207,7 @@ static Expr *parse_factor(Parser *p) {
 static Expr *parse_unary(Parser *p) {
     if (match(p, TOK_MINUS)) {
         Expr *right = parse_unary(p);
-        Expr *unary = new_expr(EXPR_UNARY);
+        Expr *unary = new_expr(p, EXPR_UNARY);
         unary->as.unary.op = UNOP_NEG;
         unary->as.unary.rhs = right;
         return unary;
@@ -206,7 +215,7 @@ static Expr *parse_unary(Parser *p) {
 
     if (match(p, TOK_NOT)) {
         Expr *right = parse_unary(p);
-        Expr *unary = new_expr(EXPR_UNARY);
+        Expr *unary = new_expr(p, EXPR_UNARY);
         unary->as.unary.op = UNOP_NOT;
         unary->as.unary.rhs = right;
         return unary;
@@ -217,7 +226,7 @@ static Expr *parse_unary(Parser *p) {
 
 static Expr *parse_primary(Parser *p) {
     if (match(p, TOK_INT)) {
-        Expr *expr = new_expr(EXPR_INT);
+        Expr *expr = new_expr(p,EXPR_INT);
 
         char buffer[64];
         snprintf(buffer, sizeof(buffer), "%.*s",
@@ -229,21 +238,58 @@ static Expr *parse_primary(Parser *p) {
     }
 
     if (match(p, TOK_TRUE)) {
-        Expr *expr = new_expr(EXPR_BOOL);
+        Expr *expr = new_expr(p, EXPR_BOOL);
         expr->as.bool_val = 1;
         return expr;
     }
 
     if (match(p, TOK_FALSE)) {
-        Expr *expr = new_expr(EXPR_BOOL);
+        Expr *expr = new_expr(p, EXPR_BOOL);
         expr->as.bool_val = 0;
         return expr;
     }
 
     if (match(p, TOK_IDENT)) {
-        Expr *expr = new_expr(EXPR_VAR);
-        expr->as.var.name = strndup(p->previous.start,
-                                    p->previous.length);
+        char *name = strndup(p->previous.start, p->previous.length);
+
+        /* call: ident '(' args? ')' */
+        if (p->current.type == TOK_LPAREN) {
+            advance(p);  // consume '('
+
+            Expr **args = NULL;
+            size_t argc = 0;
+
+            if (p->current.type != TOK_RPAREN) {
+                while (1) {
+                    Expr *arg = parse_expression(p);
+
+                    args = realloc(args, sizeof(Expr *) * (argc + 1));
+                    args[argc++] = arg;
+
+                    if (p->current.type == TOK_COMMA) {
+                        advance(p);  // consume ','
+                        continue;
+                    }
+                    break;
+                }
+            }
+
+            if (p->current.type != TOK_RPAREN) {
+                printf("Expected ')' after call arguments\n");
+                exit(1);
+            }
+            advance(p);  // consume ')'
+
+            Expr *expr = new_expr(p, EXPR_CALL);
+            expr->as.call.callee = name;
+            expr->as.call.args = args;
+            expr->as.call.argc = argc;
+            return expr;
+        }
+
+        /* plain variable */
+        Expr *expr = new_expr(p, EXPR_VAR);
+        expr->as.var.name = name;
         return expr;
     }
 

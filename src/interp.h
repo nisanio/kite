@@ -14,7 +14,7 @@ typedef struct {
 Value eval_expr(Expr *expr, Env *env);
 EvalResult eval_stmt(Stmt *stmt, Env *env);
 EvalResult eval_program(Program *program, Env *env);
-
+static void eval_fn_def_stmt(Stmt *stmt, Env *env);
 
 
 
