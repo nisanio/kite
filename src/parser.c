@@ -24,6 +24,7 @@ static Stmt *new_stmt(StmtKind kind);
 static Stmt *parse_do(Parser *p);
 static Stmt *parse_fn_def(Parser *p);
 static Stmt *parse_return(Parser *p);
+static Expr *parse_postfix(Parser *p);
 
 /* =========================
    Utilities
@@ -41,6 +42,26 @@ static int match(Parser *p, TokenType type) {
     }
     return 0;
 }
+
+static int check(Parser *p, TokenType type) {
+    return p->current.type == type;
+}
+
+static void consume(Parser *p, TokenType type, const char *msg) {
+    if (p->current.type == type) {
+        advance(p);
+        return;
+    }
+    printf("%s\n", msg);
+    exit(1);
+}
+
+static void parser_error(Parser *p, const char *msg) {
+    (void)p;
+    printf("%s\n", msg);
+    exit(1);
+}
+
 
 void parser_init(Parser *p, Lexer *lexer) {
     p->lexer = lexer;
@@ -204,6 +225,33 @@ static Expr *parse_factor(Parser *p) {
     return expr;
 }
 
+static Expr *parse_postfix(Parser *p) {
+    Expr *expr = parse_primary(p);
+
+    while (1) {
+
+        /* Indexing: expr '[' expression ']' */
+        if (match(p, TOK_LBRACK)) {
+
+            Expr *index_expr = parse_expression(p);
+
+            consume(p, TOK_RBRACK, "Expected ']' after index expression");
+
+            Expr *index_node = new_expr(p, EXPR_INDEX);
+            index_node->as.index.base = expr;
+            index_node->as.index.index = index_expr;
+
+            expr = index_node;
+            continue;
+        }
+
+        break;
+    }
+
+    return expr;
+}
+
+
 static Expr *parse_unary(Parser *p) {
     if (match(p, TOK_MINUS)) {
         Expr *right = parse_unary(p);
@@ -221,7 +269,7 @@ static Expr *parse_unary(Parser *p) {
         return unary;
     }
 
-    return parse_primary(p);
+    return parse_postfix(p);
 }
 
 static Expr *parse_primary(Parser *p) {
@@ -236,6 +284,46 @@ static Expr *parse_primary(Parser *p) {
         expr->as.int_val = atoll(buffer);
         return expr;
     }
+
+    if (match(p, TOK_STRING)) {
+        Expr *expr = new_expr(p, EXPR_STRING);
+
+        /* Strip surrounding quotes */
+        const char *start = p->previous.start + 1;
+        size_t len = p->previous.length - 2;
+
+        expr->as.string.data = strndup(start, len);
+        expr->as.string.len = len;
+
+        return expr;
+    }
+
+    if (match(p, TOK_LBRACK)) {
+        Expr *expr = new_expr(p, EXPR_ARRAY);
+
+        Expr **items = NULL;
+        size_t count = 0;
+
+        if (!check(p, TOK_RBRACK)) {
+            do {
+                items = realloc(items, sizeof(Expr*) * (count + 1));
+                if (!items) {
+                    parser_error(p, "Out of memory");
+                }
+
+                items[count++] = parse_expression(p);
+
+            } while (match(p, TOK_COMMA));
+        }
+
+        consume(p, TOK_RBRACK, "Expected ']'");
+        
+        expr->as.array.items = items;
+        expr->as.array.count = count;
+
+        return expr;
+    }
+
 
     if (match(p, TOK_TRUE)) {
         Expr *expr = new_expr(p, EXPR_BOOL);

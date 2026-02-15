@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+
+
 typedef struct EnvEntry {
     char *name;
     Value value;
@@ -91,4 +93,25 @@ int env_has_local(Env *env, const char *name) {
         entry = entry->next;
     }
     return 0;
+}
+
+
+extern Value builtin_print(Value *args, size_t argc);
+extern Value builtin_len(Value *args, size_t argc);
+Env *env_create_global(void) {
+    Env *env = env_create(NULL);
+
+    Value v;
+    v.type = VAL_BUILTIN;
+    v.as.builtin_val = builtin_print;
+
+    env_define(env, "print", v);
+
+    Value v2;
+    v2.type = VAL_BUILTIN;
+    v2.as.builtin_val = builtin_len;
+
+    env_define(env, "len", v2);
+
+    return env;
 }

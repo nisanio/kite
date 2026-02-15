@@ -1,15 +1,56 @@
 #include "interp.h"
 #include <stdio.h>
 #include <stdlib.h>
-
+#include <string.h>
 
 
 /* Forward (needed because eval_stmt uses it before definition) */
 static void eval_fn_def_stmt(Stmt *stmt, Env *env);
-
+static void runtime_error(const char *msg);
 /* =========================
    Helpers
    ========================= */
+
+ Value builtin_print(Value *args, size_t argc) {
+    if (argc != 1) {
+        runtime_error("print expects exactly one argument");
+    }
+
+    Value v = args[0];
+
+    if (v.type == VAL_STRING) {
+        printf("%s\n", v.as.str_val.data);
+        return value_bool(true);
+    }
+
+    if (v.type == VAL_INT) {
+        printf("%lld\n", (long long)v.as.int_val);
+        return value_bool(true);
+    }
+
+    if (v.type == VAL_BOOL) {
+        printf("%s\n", v.as.bool_val ? "true" : "false");
+        return value_bool(true);
+    }
+
+    runtime_error("Unsupported type for print");
+    return value_bool(false);
+}
+
+Value builtin_len(Value *args, size_t argc) {
+    if (argc != 1) {
+        runtime_error("len expects exactly one argument");
+    }
+
+    Value v = args[0];
+
+    if (v.type != VAL_STRING) {
+        runtime_error("len expects a string");
+    }
+
+    return value_int((int64_t)v.as.str_val.len);
+}
+
 
 static int is_bool(Value v) {
     return v.type == VAL_BOOL;
@@ -69,6 +110,28 @@ static Value eval_var_expr(Expr *expr, Env *env) {
     return v;
 }
 
+static Value eval_index_expr(Expr *expr, Env *env) {
+    Value base = eval_expr(expr->as.index.base, env);
+
+    if (base.type != VAL_ARRAY) {
+        runtime_error("Indexing requires array");
+    }
+
+    Value index = eval_expr(expr->as.index.index, env);
+
+    if (index.type != VAL_INT) {
+        runtime_error("Array index must be integer");
+    }
+
+    int64_t i = index.as.int_val;
+
+    if (i < 0 || (size_t)i >= base.as.array_val.count) {
+        runtime_error("Array index out of bounds");
+    }
+
+    return base.as.array_val.items[i];
+}
+
 
 static Value eval_unary_expr(Expr *expr, Env *env) {
     Value right = eval_expr(expr->as.unary.rhs, env);
@@ -90,6 +153,28 @@ static Value eval_unary_expr(Expr *expr, Env *env) {
     runtime_error("Unsupported unary operator");
     return value_int(0);
 }
+
+static Value eval_array_expr(Expr *expr, Env *env) {
+    Value arr = value_array();
+
+    size_t count = expr->as.array.count;
+
+    arr.as.array_val.items = malloc(sizeof(Value) * count);
+    if (!arr.as.array_val.items) {
+        runtime_error_at(expr->line, expr->col, "Out of memory");
+    }
+
+    arr.as.array_val.count = count;
+    arr.as.array_val.capacity = count;
+
+    for (size_t i = 0; i < count; i++) {
+        arr.as.array_val.items[i] =
+            eval_expr(expr->as.array.items[i], env);
+    }
+
+    return arr;
+}
+
 
 static Value eval_logical_binary(Expr *expr, Env *env) {
     /* Short-circuit logic */
@@ -208,6 +293,28 @@ static Value eval_binary_expr(Expr *expr, Env *env) {
 
     switch (op) {
         case BIN_ADD:
+            if (left.type == VAL_STRING && right.type == VAL_STRING) {
+                size_t len = left.as.str_val.len + right.as.str_val.len;
+
+                char *buffer = malloc(len + 1);
+                if (!buffer) {
+                    runtime_error_at(expr->line, expr->col, "Out of memory");
+                }
+
+                memcpy(buffer, left.as.str_val.data, left.as.str_val.len);
+                memcpy(buffer + left.as.str_val.len,
+                    right.as.str_val.data,
+                    right.as.str_val.len);
+
+                buffer[len] = '\0';
+
+                Value v;
+                v.type = VAL_STRING;
+                v.as.str_val.data = buffer;
+                v.as.str_val.len = len;
+                return v;
+            }
+            return eval_arithmetic_binary(expr, left, right);
         case BIN_SUB:
         case BIN_MUL:
         case BIN_DIV:
@@ -297,8 +404,13 @@ static Value eval_call_expr(Expr *expr, Env *env) {
     }
 
     if (callee.type != VAL_FUNCTION) {
-        runtime_error_at(expr->line, expr->col,
-                     "Attempt to call non-function value");
+        Value args[expr->as.call.argc];
+
+        for (size_t i = 0; i < expr->as.call.argc; i++) {
+            args[i] = eval_expr(expr->as.call.args[i], env);
+        }
+
+        return callee.as.builtin_val(args, expr->as.call.argc);
     }
 
 
@@ -338,6 +450,9 @@ Value eval_expr(Expr *expr, Env *env) {
         case EXPR_INT:
             return eval_int_expr(expr);
 
+        case EXPR_STRING:
+            return value_string(expr->as.string.data);
+
         case EXPR_BOOL:
             return eval_bool_expr(expr);
 
@@ -350,8 +465,14 @@ Value eval_expr(Expr *expr, Env *env) {
         case EXPR_BINARY:
             return eval_binary_expr(expr, env);
 
+        case EXPR_ARRAY:
+            return eval_array_expr(expr, env);
+
         case EXPR_CALL:
             return eval_call_expr(expr, env);
+        
+        case EXPR_INDEX:
+            return eval_index_expr(expr, env);
 
         default:
             runtime_error("Unsupported expression");
@@ -372,7 +493,16 @@ static void eval_assign_stmt(Stmt *stmt, Env *env) {
 }
 
 static void eval_expr_stmt(Stmt *stmt, Env *env) {
-    Value value = eval_expr(stmt->as.expr.expr, env);
+
+    Expr *expr = stmt->as.expr.expr;
+
+    Value value = eval_expr(expr, env);
+
+    /* Do not print result of print() calls */
+    if (expr->kind == EXPR_CALL &&
+        strcmp(expr->as.call.callee, "print") == 0) {
+        return;
+    }
 
     if (value.type == VAL_INT) {
         printf("=> %lld\n", (long long)value.as.int_val);
@@ -381,6 +511,35 @@ static void eval_expr_stmt(Stmt *stmt, Env *env) {
 
     if (value.type == VAL_BOOL) {
         printf("=> %s\n", value.as.bool_val ? "true" : "false");
+        return;
+    }
+
+    if (value.type == VAL_STRING) {
+        printf("=> %s\n", value.as.str_val.data);
+        return;
+    }
+
+    if (value.type == VAL_ARRAY) {
+        printf("=> [");
+
+        for (size_t i = 0; i < value.as.array_val.count; i++) {
+            Value item = value.as.array_val.items[i];
+
+            if (item.type == VAL_INT) {
+                printf("%lld", (long long)item.as.int_val);
+            } else if (item.type == VAL_STRING) {
+                printf("\"%s\"", item.as.str_val.data);
+            } else if (item.type == VAL_BOOL) {
+                printf("%s", item.as.bool_val ? "true" : "false");
+            } else {
+                printf("<unsupported>");
+            }
+
+            if (i + 1 < value.as.array_val.count)
+                printf(", ");
+        }
+
+        printf("]\n");
         return;
     }
 

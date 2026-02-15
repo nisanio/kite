@@ -74,7 +74,7 @@ int main(int argc, char **argv) {
 
     Program *program = parse_program(&parser);
 
-    Env *global = env_create(NULL);
+    Env *global = env_create_global();
 
     (void)eval_program(program, global);
 
