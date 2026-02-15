@@ -1,0 +1,44 @@
+r = read_file("wc.kite")
+
+if r[0]
+
+    text = r[1]
+
+    chars = len(text)
+    lines = 0
+    words = 0
+
+    i = 0
+    in_word = false
+
+    do i < len(text)
+
+        c = text[i]
+
+        if c == "\n"
+            lines = lines + 1
+        end
+
+        if c == " " or c == "\n" or c == "\t"
+            if in_word
+                words = words + 1
+                in_word = false
+            end
+        else
+            in_word = true
+        end
+
+        i = i + 1
+    end
+
+    if in_word
+        words = words + 1
+    end
+
+    print(chars)
+    print(lines)
+    print(words)
+
+else
+    print(r[1])
+end

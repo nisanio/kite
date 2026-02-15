@@ -1,0 +1,2 @@
+result = read_file("no_existe.txt")
+print(result)
