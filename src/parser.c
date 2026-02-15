@@ -390,7 +390,10 @@ static Expr *parse_primary(Parser *p) {
         return expr;
     }
 
-    printf("Unexpected token\n");
+    printf("Unexpected token at line %d col %d (type=%d)\n",
+       p->current.line,
+       p->current.col,
+       p->current.type);
     exit(1);
     return NULL;
 }
@@ -413,6 +416,8 @@ static Stmt *parse_do(Parser *p) {
         }
 
         advance(p);  // consume newline
+        while (p->current.type == TOK_NEWLINE)
+            advance(p);
         is_post = 0;
     } else {
         /* repeat-style: do NEWLINE */
@@ -474,7 +479,8 @@ static Stmt *parse_fn_def(Parser *p) {
 
     Token name_tok = p->current;
     advance(p);  // consume name
-
+    while (p->current.type == TOK_NEWLINE)
+        advance(p);
     if (p->current.type != TOK_LPAREN) {
         printf("Expected '(' after function name\n");
         exit(1);
@@ -585,6 +591,8 @@ static Stmt *parse_if(Parser *p) {
         exit(1);
     }
     advance(p);  // consume newline
+    while (p->current.type == TOK_NEWLINE)
+        advance(p);
 
     Stmt **then_body = NULL;
     size_t then_count = 0;

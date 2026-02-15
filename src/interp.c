@@ -7,6 +7,8 @@
 /* Forward (needed because eval_stmt uses it before definition) */
 static void eval_fn_def_stmt(Stmt *stmt, Env *env);
 static void runtime_error(const char *msg);
+
+
 /* =========================
    Helpers
    ========================= */
@@ -33,9 +35,85 @@ static void runtime_error(const char *msg);
         return value_bool(true);
     }
 
+    if (v.type == VAL_ARRAY) {
+        printf("[");
+
+        for (size_t i = 0; i < v.as.array_val.count; i++) {
+            Value item = v.as.array_val.items[i];
+
+            if (item.type == VAL_INT) {
+                printf("%lld", (long long)item.as.int_val);
+            } else if (item.type == VAL_STRING) {
+                printf("\"%s\"", item.as.str_val.data);
+            } else if (item.type == VAL_BOOL) {
+                printf("%s", item.as.bool_val ? "true" : "false");
+            } else {
+                printf("<unsupported>");
+            }
+
+            if (i + 1 < v.as.array_val.count)
+                printf(", ");
+        }
+
+        printf("]\n");
+        return value_bool(true);
+    }
+
     runtime_error("Unsupported type for print");
     return value_bool(false);
 }
+
+Value builtin_write_file(Value *args, size_t argc) {
+    if (argc != 2) {
+        runtime_error("write_file expects exactly two arguments");
+    }
+
+    if (args[0].type != VAL_STRING ||
+        args[1].type != VAL_STRING) {
+        runtime_error("write_file expects (string path, string content)");
+    }
+
+    const char *path = args[0].as.str_val.data;
+    const char *content = args[1].as.str_val.data;
+
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        Value result = value_array();
+        result.as.array_val.count = 2;
+        result.as.array_val.capacity = 2;
+        result.as.array_val.items = malloc(sizeof(Value) * 2);
+
+        result.as.array_val.items[0] = value_bool(false);
+        result.as.array_val.items[1] = value_string("Failed to open file for writing");
+
+        return result;
+    }
+
+    size_t written = fwrite(content, 1, strlen(content), f);
+    fclose(f);
+
+    if (written != strlen(content)) {
+        Value result = value_array();
+        result.as.array_val.count = 2;
+        result.as.array_val.capacity = 2;
+        result.as.array_val.items = malloc(sizeof(Value) * 2);
+
+        result.as.array_val.items[0] = value_bool(false);
+        result.as.array_val.items[1] = value_string("Failed to write full content");
+
+        return result;
+    }
+
+    Value result = value_array();
+    result.as.array_val.count = 1;
+    result.as.array_val.capacity = 1;
+    result.as.array_val.items = malloc(sizeof(Value) * 1);
+
+    result.as.array_val.items[0] = value_bool(true);
+
+    return result;
+}
+
 
 Value builtin_len(Value *args, size_t argc) {
     if (argc != 1) {
@@ -51,6 +129,55 @@ Value builtin_len(Value *args, size_t argc) {
     return value_int((int64_t)v.as.str_val.len);
 }
 
+Value builtin_read_file(Value *args, size_t argc) {
+    if (argc != 1) {
+        runtime_error("read_file expects exactly one argument");
+    }
+
+    if (args[0].type != VAL_STRING) {
+        runtime_error("read_file expects a string path");
+    }
+
+    const char *path = args[0].as.str_val.data;
+
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        Value result = value_array();
+        result.as.array_val.count = 2;
+        result.as.array_val.capacity = 2;
+        result.as.array_val.items = malloc(sizeof(Value) * 2);
+
+        result.as.array_val.items[0] = value_bool(false);
+        result.as.array_val.items[1] = value_string("Failed to open file");
+
+        return result;
+    }
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    rewind(f);
+
+    char *buffer = malloc(size + 1);
+    if (!buffer) {
+        fclose(f);
+        runtime_error("Out of memory");
+    }
+
+    fread(buffer, 1, size, f);
+    buffer[size] = '\0';
+    fclose(f);
+
+    Value result = value_array();
+    result.as.array_val.count = 2;
+    result.as.array_val.capacity = 2;
+    result.as.array_val.items = malloc(sizeof(Value) * 2);
+
+    result.as.array_val.items[0] = value_bool(true);
+    result.as.array_val.items[1] = value_string(buffer);
+
+    return result;
+}
+
 
 static int is_bool(Value v) {
     return v.type == VAL_BOOL;
@@ -61,10 +188,10 @@ static int is_int(Value v) {
 }
 
 
-static void runtime_error_stmt(Stmt *stmt, const char *msg) {
-    printf("[line %d:%d] %s\n", stmt->line, stmt->col, msg);
-    exit(1);
-}
+// static void runtime_error_stmt(Stmt *stmt, const char *msg) {
+//     printf("[line %d:%d] %s\n", stmt->line, stmt->col, msg);
+//     exit(1);
+// }
     
 
 static void runtime_error(const char *msg) {
@@ -112,25 +239,39 @@ static Value eval_var_expr(Expr *expr, Env *env) {
 
 static Value eval_index_expr(Expr *expr, Env *env) {
     Value base = eval_expr(expr->as.index.base, env);
-
-    if (base.type != VAL_ARRAY) {
-        runtime_error("Indexing requires array");
-    }
-
     Value index = eval_expr(expr->as.index.index, env);
 
     if (index.type != VAL_INT) {
-        runtime_error("Array index must be integer");
+        runtime_error("Index must be integer");
     }
 
     int64_t i = index.as.int_val;
 
-    if (i < 0 || (size_t)i >= base.as.array_val.count) {
-        runtime_error("Array index out of bounds");
+    /* Array indexing */
+    if (base.type == VAL_ARRAY) {
+        if (i < 0 || (size_t)i >= base.as.array_val.count) {
+            runtime_error("Array index out of bounds");
+        }
+        return base.as.array_val.items[i];
     }
 
-    return base.as.array_val.items[i];
+    /* String indexing */
+    if (base.type == VAL_STRING) {
+        if (i < 0 || (size_t)i >= base.as.str_val.len) {
+            runtime_error("String index out of bounds");
+        }
+
+        char buf[2];
+        buf[0] = base.as.str_val.data[i];
+        buf[1] = '\0';
+
+        return value_string(buf);
+    }
+
+    runtime_error("Indexing requires array or string");
+    return value_int(0);
 }
+
 
 
 static Value eval_unary_expr(Expr *expr, Env *env) {
@@ -246,38 +387,78 @@ static Value eval_arithmetic_binary(Expr *expr, Value left, Value right){
 }
 
 static Value eval_comparison_binary(BinOp op, Value left, Value right) {
-    if (!is_int(left) || !is_int(right)) {
+
+    /* String equality */
+    if ((op == BIN_EQ || op == BIN_NEQ) &&
+        left.type == VAL_STRING &&
+        right.type == VAL_STRING) {
+
+        int equal = 0;
+
+        if (left.as.str_val.len == right.as.str_val.len &&
+            memcmp(left.as.str_val.data,
+                   right.as.str_val.data,
+                   left.as.str_val.len) == 0) {
+            equal = 1;
+        }
+
+        if (op == BIN_EQ)
+            return value_bool(equal);
+        else
+            return value_bool(!equal);
+    }
+
+    /* Integer comparisons */
+    if (left.type != VAL_INT || right.type != VAL_INT) {
         runtime_error("Comparison operators require integers");
     }
 
-    int result = 0;
-
     switch (op) {
-        case BIN_EQ:
-            result = (left.as.int_val == right.as.int_val);
-            break;
-        case BIN_NEQ:
-            result = (left.as.int_val != right.as.int_val);
-            break;
-        case BIN_LT:
-            result = (left.as.int_val < right.as.int_val);
-            break;
-        case BIN_LTE:
-            result = (left.as.int_val <= right.as.int_val);
-            break;
-        case BIN_GT:
-            result = (left.as.int_val > right.as.int_val);
-            break;
-        case BIN_GTE:
-            result = (left.as.int_val >= right.as.int_val);
-            break;
+        case BIN_EQ:  return value_bool(left.as.int_val == right.as.int_val);
+        case BIN_NEQ: return value_bool(left.as.int_val != right.as.int_val);
+        case BIN_LT:  return value_bool(left.as.int_val <  right.as.int_val);
+        case BIN_LTE: return value_bool(left.as.int_val <= right.as.int_val);
+        case BIN_GT:  return value_bool(left.as.int_val >  right.as.int_val);
+        case BIN_GTE: return value_bool(left.as.int_val >= right.as.int_val);
         default:
-            runtime_error("Unsupported comparison operator");
-            break;
+            runtime_error("Invalid comparison operator");
+            return value_bool(false);
     }
-
-    return value_bool(result);
 }
+
+// static Value eval_comparison_binary(BinOp op, Value left, Value right) {
+//     if (!is_int(left) || !is_int(right)) {
+//         runtime_error("Comparison operators require integers");
+//     }
+
+//     int result = 0;
+
+//     switch (op) {
+//         case BIN_EQ:
+//             result = (left.as.int_val == right.as.int_val);
+//             break;
+//         case BIN_NEQ:
+//             result = (left.as.int_val != right.as.int_val);
+//             break;
+//         case BIN_LT:
+//             result = (left.as.int_val < right.as.int_val);
+//             break;
+//         case BIN_LTE:
+//             result = (left.as.int_val <= right.as.int_val);
+//             break;
+//         case BIN_GT:
+//             result = (left.as.int_val > right.as.int_val);
+//             break;
+//         case BIN_GTE:
+//             result = (left.as.int_val >= right.as.int_val);
+//             break;
+//         default:
+//             runtime_error("Unsupported comparison operator");
+//             break;
+//     }
+
+//     return value_bool(result);
+// }
 
 static Value eval_binary_expr(Expr *expr, Env *env) {
     BinOp op = expr->as.binary.op;

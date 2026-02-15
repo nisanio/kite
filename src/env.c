@@ -98,6 +98,8 @@ int env_has_local(Env *env, const char *name) {
 
 extern Value builtin_print(Value *args, size_t argc);
 extern Value builtin_len(Value *args, size_t argc);
+extern Value builtin_read_file(Value *args, size_t argc);
+extern Value builtin_write_file(Value *args, size_t argc);
 Env *env_create_global(void) {
     Env *env = env_create(NULL);
 
@@ -112,6 +114,18 @@ Env *env_create_global(void) {
     v2.as.builtin_val = builtin_len;
 
     env_define(env, "len", v2);
+
+    Value v3;
+    v3.type = VAL_BUILTIN;
+    v3.as.builtin_val = builtin_read_file;
+
+    env_define(env, "read_file", v3);
+
+    Value v4;
+    v4.type = VAL_BUILTIN;
+    v4.as.builtin_val = builtin_write_file;
+
+    env_define(env, "write_file", v4);
 
     return env;
 }
